@@ -29,6 +29,7 @@ def RAG(
     df: pd.DataFrame,
     question_embeddings: Dict[str, torch.Tensor],
     n_kept_entries: int,  # extracts: List[str], input_question: str
+    show_progress_bar: bool = False,
     additional_context: str = "",
     embeddings_column: str = "Embeddings",
     output_language: str = "english",
@@ -100,6 +101,7 @@ def RAG(
         default_response=default_response,
         api_pipeline=api_pipeline,
         api_key=api_key,
+        show_progress_bar=show_progress_bar,
     )  # _call_chatgpt_bulk(prompts, "{}", "structured")
 
     final_data = []
