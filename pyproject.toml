@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "data_generation"
+version = "0.1.0"
+description = "A library for data generation using RAG techniques"
+readme = "README.md"
+authors = [
+    {name = "Reporter.ai", email = "reporter.ai@boldcode.io"}
+]
+license = {text = "GNU Affero General Public License v3"}
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: GNU Affero General Public License v3",
+    "Operating System :: OS Independent",
+]
+requires-python = ">=3.6"
+dependencies = [
+    "torch",
+    "pandas",
+    "openai-multiproc-inference",
+]
+
+[project.urls]
+Repository = "https://github.com/MediaMonitoringAndAnalysis/data_generation"
