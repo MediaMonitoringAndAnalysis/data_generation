@@ -1,5 +1,5 @@
 from typing import List, Dict, Union
-from openai_multiproc_inference import get_answers
+from llm_multiprocessing_inference import get_answers
 import pandas as pd
 import torch
 import json

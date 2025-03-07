@@ -7,7 +7,7 @@ setup(
     install_requires=[
         "torch",
         "pandas",
-        "openai-multiproc-inference",
+        "llm_multiprocessing_inference",
     ],
     author="Reporter.ai",
     author_email="reporter.ai@boldcode.io",
