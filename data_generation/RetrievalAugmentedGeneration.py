@@ -24,27 +24,19 @@ If no information is relevant to answer the question, return an empty dictionary
 
 df_relevant_columns = ["Extraction Text", "Document Title", "Document Publishing Date", "Document URL", "Document Source"]
 
+default_response = {"answer": "-", "relevance": 0.0, "Relevant IDs": []}
 
-def RAG(
-    df: pd.DataFrame,
+
+def generate_context_and_prompts(
+    qa_df: pd.DataFrame,
     question_embeddings: Dict[str, torch.Tensor],
-    n_kept_entries: int,  # extracts: List[str], input_question: str
-    show_progress_bar: bool = False,
+    n_kept_entries: int,
     additional_context: str = "",
     embeddings_column: str = "Embeddings",
     output_language: str = "english",
     question_answering_retrieval_system_prompt=question_answering_retrieval_system_prompt,
     text_col="Extraction Text",
-    api_key=os.getenv("openai_api_key"),
-    api_pipeline="OpenAI",
-    model="gpt-4o-mini",
-    df_relevant_columns=df_relevant_columns,
-) -> List[Dict[str, Union[str, float]]]:
-    """
-    Retrieve the question and answer information from a list of extracts using the input question.
-    """
-    qa_df = df.copy().drop_duplicates(subset=[text_col])
-    
+):
     # st.markdown(f"Number of unique extracts: {len(qa_df)}")
     extracts_embeddings = torch.tensor(
         qa_df[embeddings_column].tolist(), dtype=torch.float16
@@ -91,19 +83,15 @@ def RAG(
 
         most_relevant_df["question_id"] = question_id
         context_df = pd.concat([context_df, most_relevant_df])
+    
+    return prompts, context_df
 
-    default_response = {"answer": "-", "relevance": 0.0, "Relevant IDs": []}
 
-    answers: List[Dict[str, Union[str, float]]] = get_answers(
-        prompts=prompts,
-        response_type="structured",
-        model=model,
-        default_response=default_response,
-        api_pipeline=api_pipeline,
-        api_key=api_key,
-        show_progress_bar=show_progress_bar,
-    )  # _call_chatgpt_bulk(prompts, "{}", "structured")
-
+def postprocess_RAG_answers(
+    answers: List[Dict[str, Union[str, float]]],
+    context_df: pd.DataFrame,
+    df_relevant_columns: List[str],
+):
     final_data = []
     # print(answers)
     for question_id, one_answer in enumerate(answers):
@@ -137,4 +125,53 @@ def RAG(
         final_data.append(
             one_entry_final_results
         )
+    return final_data
+
+
+def RAG(
+    df: pd.DataFrame,
+    question_embeddings: Dict[str, torch.Tensor],
+    n_kept_entries: int,  # extracts: List[str], input_question: str
+    show_progress_bar: bool = False,
+    additional_context: str = "",
+    embeddings_column: str = "Embeddings",
+    output_language: str = "english",
+    question_answering_retrieval_system_prompt=question_answering_retrieval_system_prompt,
+    text_col="Extraction Text",
+    api_key=os.getenv("openai_api_key"),
+    api_pipeline="OpenAI",
+    model="gpt-4o-mini",
+    df_relevant_columns=df_relevant_columns,
+) -> List[Dict[str, Union[str, float]]]:
+    """
+    Retrieve the question and answer information from a list of extracts using the input question.
+    """
+      
+    context_df, prompts = generate_context_and_prompts(
+        qa_df=df,
+        question_embeddings=question_embeddings,
+        n_kept_entries=n_kept_entries,
+        additional_context=additional_context,
+        embeddings_column=embeddings_column,
+        output_language=output_language,
+        question_answering_retrieval_system_prompt=question_answering_retrieval_system_prompt,
+        text_col=text_col,
+    )
+
+    answers = get_answers(
+        prompts=prompts,
+        response_type="structured",
+        model=model,
+        default_response=default_response,
+        api_pipeline=api_pipeline,
+        api_key=api_key,
+        show_progress_bar=show_progress_bar,
+        additional_progress_bar_description="RAG answers generation"
+    )
+
+    final_data = postprocess_RAG_answers(
+        answers=answers,
+        context_df=context_df,
+        df_relevant_columns=df_relevant_columns,
+    )
     return final_data
