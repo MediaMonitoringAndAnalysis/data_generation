@@ -96,7 +96,7 @@ def postprocess_RAG_answers(
     # print(answers)
     for question_id, one_answer in enumerate(answers):
         
-        if len(one_answer) > 0:
+        if len(one_answer) > 0 and one_answer["answer"] != "-":
             
             final_answer_one_question = one_answer["answer"]
             final_relevance_one_question = one_answer["relevance"]
