@@ -48,7 +48,7 @@ def generate_context_and_prompts(
         question_embeddings.items()
     ):
 
-        if len(one_question_embeddings) > 1:
+        if len(qa_df) > 1:
             embedding_similarity = (
                 torch.matmul(extracts_embeddings.float(), one_question_embeddings.T.float())
                 .reshape(-1)
