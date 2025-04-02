@@ -155,7 +155,7 @@ def RAG(
     Retrieve the question and answer information from a list of extracts using the input question.
     """
       
-    context_df, prompts = generate_context_and_prompts(
+    prompts, context_df = generate_context_and_prompts(
         qa_df=df,
         question_embeddings=question_embeddings,
         n_kept_entries=n_kept_entries,
