@@ -1,4 +1,4 @@
-from typing import List, Dict, Union
+from typing import List, Dict, Union, Any, Optional
 from llm_multiprocessing_inference import get_answers
 import pandas as pd
 import torch
@@ -30,15 +30,58 @@ If no information is relevant to answer the question, return an empty dictionary
 %s
 """
 
-df_relevant_columns = ["Extraction Text", "Document Title", "Document Publishing Date", "Document URL", "Document Source"]
+df_relevant_columns = [
+    "Extraction Text",
+    "Document Title",
+    "Document Publishing Date",
+    "Document URL",
+    "Document Source",
+]
 
 default_response = {"answer": "-", "relevance": 0.0, "evidence": []}
+
+
+def _get_embeddings_similarity(
+    qa_df: pd.DataFrame,
+    extracts_embeddings: torch.Tensor,
+    one_question_embeddings: torch.Tensor,
+    n_kept_entries: int,
+):
+    embedding_similarity = (
+        torch.matmul(extracts_embeddings.float(), one_question_embeddings.T.float())
+        .reshape(-1)
+        .squeeze()
+    )
+
+    # descending argsort to get the most similar embeddings
+    most_similar_indices = torch.argsort(embedding_similarity, descending=True)
+    most_similar_indices = most_similar_indices[:n_kept_entries]
+    most_relevant_df = qa_df.iloc[most_similar_indices].copy()
+    return most_relevant_df
+
+
+def _get_zero_shot_reranking(
+    most_relevant_df: pd.DataFrame,
+    one_question: str,
+    text_col: str,
+    zero_shot_reranking_pipeline: Dict[str, Any],
+):
+    from zero_shot_classification import MultiStepZeroShotClassifier
+
+    classifier = MultiStepZeroShotClassifier(**zero_shot_reranking_pipeline)
+    tags = [one_question]
+    outputs: List[Dict[str, float]] = classifier(entries=most_relevant_df[text_col].tolist(), tags=tags)
+    most_relevant_df["relevance"] = [output[one_question] for output in outputs]
+    most_relevant_df = most_relevant_df.sort_values(by="relevance", ascending=False)
+    return most_relevant_df
 
 
 def generate_context_and_prompts(
     qa_df: pd.DataFrame,
     question_embeddings: Dict[str, torch.Tensor],
     n_kept_entries: int,
+    n_initial_kept_entries: int = 200,
+    zero_shot_reranking_pipeline: Optional[Dict[str, Any]] = None,
     additional_context: str = "",
     embeddings_column: str = "Embeddings",
     output_language: str = "english",
@@ -57,30 +100,38 @@ def generate_context_and_prompts(
     ):
 
         if len(qa_df) > 1:
-            embedding_similarity = (
-                torch.matmul(extracts_embeddings.float(), one_question_embeddings.T.float())
-                .reshape(-1)
-                .squeeze()
+            if zero_shot_reranking_pipeline is not None:
+                initial_kept_entries = n_initial_kept_entries
+            else:
+                initial_kept_entries = n_kept_entries
+            most_relevant_df = _get_embeddings_similarity(
+                qa_df,
+                extracts_embeddings,
+                one_question_embeddings,
+                initial_kept_entries,
             )
-
-            # descending argsort to get the most similar embeddings
-            most_similar_indices = torch.argsort(embedding_similarity, descending=True)
-            most_similar_indices = most_similar_indices[:n_kept_entries]
-            most_relevant_df = qa_df.iloc[most_similar_indices].copy()
+            if zero_shot_reranking_pipeline is not None:
+                most_relevant_df = _get_zero_shot_reranking(
+                    most_relevant_df,
+                    one_question,
+                    text_col,
+                    zero_shot_reranking_pipeline,
+                )
         else:
             most_relevant_df = qa_df.copy()
         # st.dataframe(most_relevant_df)
         context = json.dumps(
             {
                 i: one_info[text_col]
-                for i, (_, one_info) in enumerate(most_relevant_df.iterrows())
+                for i, (_, one_info) in enumerate(most_relevant_df.iloc[:n_kept_entries].iterrows())
             }
         )
 
         prompt_one_entry = [
             {
                 "role": "system",
-                "content": question_answering_retrieval_system_prompt % (additional_context, output_language, one_question),
+                "content": question_answering_retrieval_system_prompt
+                % (additional_context, output_language, one_question),
             },
             {
                 "role": "user",
@@ -91,7 +142,7 @@ def generate_context_and_prompts(
 
         most_relevant_df["question_id"] = question_id
         context_df = pd.concat([context_df, most_relevant_df])
-    
+
     return prompts, context_df
 
 
@@ -103,36 +154,34 @@ def postprocess_RAG_answers(
     final_data = []
     # print(answers)
     for question_id, one_answer in enumerate(answers):
-        
+
         if len(one_answer) > 0 and one_answer["answer"] != "-":
-            
+
             final_answer_one_question = one_answer["answer"]
             final_relevance_one_question = one_answer["relevance"]
-            context_df_one_question = context_df[context_df["question_id"] == question_id]
+            context_df_one_question = context_df[
+                context_df["question_id"] == question_id
+            ]
             context_df_one_question = context_df_one_question.iloc[
                 [int(id) for id in one_answer["evidence"]]
             ]
             final_context_one_question = []
             for i, row in context_df_one_question.iterrows():
                 final_context_one_question.append(
-                    {
-                        col: row[col] for col in df_relevant_columns
-                    }
+                    {col: row[col] for col in df_relevant_columns}
                 )
             one_entry_final_results = {
-                    "final_answer": final_answer_one_question,
-                    "final_relevance": final_relevance_one_question,
-                    "final_context": final_context_one_question,
-                }
+                "final_answer": final_answer_one_question,
+                "final_relevance": final_relevance_one_question,
+                "final_context": final_context_one_question,
+            }
         else:
             one_entry_final_results = {
                 "final_answer": "-",
                 "final_relevance": 0.0,
                 "final_context": [],
             }
-        final_data.append(
-            one_entry_final_results
-        )
+        final_data.append(one_entry_final_results)
     return final_data
 
 
@@ -154,7 +203,7 @@ def RAG(
     """
     Retrieve the question and answer information from a list of extracts using the input question.
     """
-      
+
     prompts, context_df = generate_context_and_prompts(
         qa_df=df,
         question_embeddings=question_embeddings,
@@ -174,7 +223,7 @@ def RAG(
         api_pipeline=api_pipeline,
         api_key=api_key,
         show_progress_bar=show_progress_bar,
-        additional_progress_bar_description="RAG answers generation"
+        additional_progress_bar_description="RAG answers generation",
     )
 
     final_data = postprocess_RAG_answers(
