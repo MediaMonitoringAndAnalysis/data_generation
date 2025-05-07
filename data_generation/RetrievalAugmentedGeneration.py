@@ -171,7 +171,7 @@ def generate_context_and_prompts(
 def postprocess_RAG_answers(
     answers: List[Dict[str, Union[str, float]]],
     context_df: pd.DataFrame,
-    df_relevant_columns: List[str],
+    df_relevant_columns: List[str] = df_relevant_columns,
 ):
     final_data = []
     # print(answers)
