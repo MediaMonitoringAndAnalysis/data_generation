@@ -3,7 +3,7 @@ from .RetrievalAugmentedGeneration import (
     generate_context_and_prompts,
     postprocess_RAG_answers,
     default_response,
-    question_answering_retrieval_system_prompt,
+    generate_one_llm_input,
 )
 
 __all__ = [
@@ -11,5 +11,5 @@ __all__ = [
     "generate_context_and_prompts",
     "default_response",
     "postprocess_RAG_answers",
-    "question_answering_retrieval_system_prompt",
+    "generate_one_llm_input",
 ]

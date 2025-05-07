@@ -70,10 +70,43 @@ def _get_zero_shot_reranking(
 
     classifier = MultiStepZeroShotClassifier(**zero_shot_reranking_pipeline)
     tags = [one_question]
-    outputs: List[Dict[str, float]] = classifier(entries=most_relevant_df[text_col].tolist(), tags=tags)
+    outputs: List[Dict[str, float]] = classifier(
+        entries=most_relevant_df[text_col].tolist(), tags=tags
+    )
     most_relevant_df["relevance"] = [output[one_question] for output in outputs]
     most_relevant_df = most_relevant_df.sort_values(by="relevance", ascending=False)
     return most_relevant_df
+
+
+def generate_one_llm_input(
+    most_relevant_df,
+    n_kept_entries,
+    one_question: str = "",
+    text_col: str = "Extraction Text",
+    additional_context: str = "",
+    output_language: str = "english",
+):
+    context = json.dumps(
+        {
+            i: one_info[text_col]
+            for i, (_, one_info) in enumerate(
+                most_relevant_df.iloc[:n_kept_entries].iterrows()
+            )
+        }
+    )
+
+    prompt_one_entry = [
+        {
+            "role": "system",
+            "content": question_answering_retrieval_system_prompt
+            % (additional_context, output_language, one_question),
+        },
+        {
+            "role": "user",
+            "content": context,
+        },
+    ]
+    return prompt_one_entry
 
 
 def generate_context_and_prompts(
@@ -120,26 +153,15 @@ def generate_context_and_prompts(
         else:
             most_relevant_df = qa_df.copy()
         # st.dataframe(most_relevant_df)
-        context = json.dumps(
-            {
-                i: one_info[text_col]
-                for i, (_, one_info) in enumerate(most_relevant_df.iloc[:n_kept_entries].iterrows())
-            }
+        prompt_one_entry = generate_one_llm_input(
+            most_relevant_df,
+            n_kept_entries,
+            one_question,
+            text_col,
+            additional_context,
+            output_language,
         )
-
-        prompt_one_entry = [
-            {
-                "role": "system",
-                "content": question_answering_retrieval_system_prompt
-                % (additional_context, output_language, one_question),
-            },
-            {
-                "role": "user",
-                "content": context,
-            },
-        ]
         prompts.append(prompt_one_entry)
-
         most_relevant_df["question_id"] = question_id
         context_df = pd.concat([context_df, most_relevant_df])
 
