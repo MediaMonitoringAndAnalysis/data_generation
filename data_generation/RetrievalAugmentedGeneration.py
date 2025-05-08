@@ -174,35 +174,41 @@ def postprocess_RAG_answers(
     df_relevant_columns: List[str] = df_relevant_columns,
 ):
     final_data = []
+    
+    default_results = {
+        "final_answer": "-",
+        "final_relevance": 0.0,
+        "final_context": [],
+    }
     # print(answers)
     for question_id, one_answer in enumerate(answers):
 
-        if len(one_answer) > 0 and one_answer["answer"] != "-":
+        try:
+            if len(one_answer) > 0 and one_answer["answer"] != "-":
 
-            final_answer_one_question = one_answer["answer"]
-            final_relevance_one_question = one_answer["relevance"]
-            context_df_one_question = context_df[
-                context_df["question_id"] == question_id
-            ]
-            context_df_one_question = context_df_one_question.iloc[
-                [int(id) for id in one_answer["evidence"]]
-            ]
-            final_context_one_question = []
-            for i, row in context_df_one_question.iterrows():
-                final_context_one_question.append(
-                    {col: row[col] for col in df_relevant_columns}
-                )
-            one_entry_final_results = {
-                "final_answer": final_answer_one_question,
-                "final_relevance": final_relevance_one_question,
-                "final_context": final_context_one_question,
-            }
-        else:
-            one_entry_final_results = {
-                "final_answer": "-",
-                "final_relevance": 0.0,
-                "final_context": [],
-            }
+                final_answer_one_question = one_answer["answer"]
+                final_relevance_one_question = one_answer["relevance"]
+                context_df_one_question = context_df[
+                    context_df["question_id"] == question_id
+                ]
+                context_df_one_question = context_df_one_question.iloc[
+                    [int(id) for id in one_answer["evidence"]]
+                ]
+                final_context_one_question = []
+                for i, row in context_df_one_question.iterrows():
+                    final_context_one_question.append(
+                        {col: row[col] for col in df_relevant_columns}
+                    )
+                one_entry_final_results = {
+                    "final_answer": final_answer_one_question,
+                    "final_relevance": final_relevance_one_question,
+                    "final_context": final_context_one_question,
+                }
+            else:
+                one_entry_final_results = default_results
+        except:
+            one_entry_final_results = default_results
+            print(f"Error for answer {one_answer}")
         final_data.append(one_entry_final_results)
     return final_data
 
